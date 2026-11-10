@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dlp-alert-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-11-01",
+
+
+  // Worker is invoked by Logpush over HTTPS -- needs a public URL
+  // Deployed as a Workers route on chelseedemosite.com
+  // Option A: deploy to a custom domain via a Workers route
+  // "routes": [
+  //   {
+  //     "pattern": "dlp-alerts.yourdomain.com/*",
+  //     "zone_name": "yourdomain.com"
+  //   }
+  // ],
+  //
+  // Option B: deploy to workers.dev (simpler, no custom domain needed)
+  "workers_dev": true,
+
+  // Set SLACK_WEBHOOK_URL as an environment variable or via wrangler secret
+  // wrangler secret put SLACK_WEBHOOK_URL
+  "vars": {
+    "SLACK_WEBHOOK_URL": ""
+  }
+}

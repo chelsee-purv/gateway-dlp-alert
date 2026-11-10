@@ -1,0 +1,17 @@
+{
+  "name": "dlp-alert-worker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "typescript": "^5.5.2",
+    "wrangler": "^4.159.0"
+  },
+  "allowScripts": {
+    "workerd@1.20261109.1": true
+  }
+}
