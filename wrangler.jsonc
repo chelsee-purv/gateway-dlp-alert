@@ -18,9 +18,14 @@
   // Option B: deploy to workers.dev (simpler, no custom domain needed)
   "workers_dev": true,
 
-  // Set SLACK_WEBHOOK_URL as an environment variable or via wrangler secret
-  // wrangler secret put SLACK_WEBHOOK_URL
+  // Set SLACK_WEBHOOK_URL as a secret:  npx wrangler secret put SLACK_WEBHOOK_URL
   "vars": {
-    "SLACK_WEBHOOK_URL": ""
+    "SLACK_WEBHOOK_URL": "",
+
+    // Email alert configuration (via MailChannels — free from Workers)
+    // Requires DNS TXT record: _mailchannels.<your-domain> → v=mc1 cfid=dlp-alert-worker.<subdomain>.workers.dev
+    "EMAIL_ALERT_TO": "ksundararajulu@essenmed.com",
+    "EMAIL_ALERT_FROM": "dlp-alerts@chelseedemosite.com",
+    "EMAIL_ALERT_FROM_NAME": "Cloudflare DLP Alert"
   }
 }
