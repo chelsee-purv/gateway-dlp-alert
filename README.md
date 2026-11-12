@@ -113,7 +113,7 @@ Published dlp-alert-worker (0.5 sec)
 
 ### Step 5: Create a Gateway HTTP Policy (if you don't have one already)
 
-This policy tells Gateway to scan AI platform traffic with your DLP profiles. Without this, there is nothing to alert on.
+This policy tells Gateway to scan ChatGPT traffic with your DLP profiles. Without this, there is nothing to alert on.
 
 1. Go to [Zero Trust Dashboard](https://one.dash.cloudflare.com/)
 2. Navigate to **Traffic controls** > **Firewall policies** > **HTTP**
@@ -122,12 +122,16 @@ This policy tells Gateway to scan AI platform traffic with your DLP profiles. Wi
 
 | Field | Value |
 |-------|-------|
-| **Policy name** | `AI Platform DLP Monitor` |
-| **Traffic selector** | Host -- matches regex -- `(chat\.openai\.com\|chatgpt\.com\|claude\.ai\|gemini\.google\.com\|copilot\.microsoft\.com)` |
+| **Policy name** | `ChatGPT DLP Monitor` |
+| **Selector** | Application |
+| **Operator** | in |
+| **Value** | Select **ChatGPT** from the dropdown |
 | **Action** | **Allow** |
 
 5. Scroll down to **Configure policy settings** > **DLP profiles** and select the profiles you want to detect (e.g., PII, Financial Data, Source Code)
 6. Click **Save**
+
+> To monitor additional AI platforms, add more applications to the same policy (Claude, Gemini, Copilot, etc.) using the **Or** logic in the traffic selector.
 
 ---
 
