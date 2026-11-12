@@ -82,11 +82,13 @@ Replace them with your actual values. For example:
 
 **Save the file.**
 
-**Then add this DNS record** so email delivery is authorized. Go to the Cloudflare dashboard for your domain, then **DNS > Records > Add record**:
+**Then add this DNS record** so email delivery is authorized. This record must be added on the domain you used in `EMAIL_ALERT_FROM`. **Your domain does not need to be on Cloudflare** -- add the record wherever your DNS is hosted (GoDaddy, Route 53, Google Domains, etc.):
 
 | Type | Name | Content |
 |------|------|---------|
 | TXT | `_mailchannels.yourcompany.com` | `v=mc1 cfid=dlp-alert-worker.YOUR-SUBDOMAIN.workers.dev` |
+
+> **Note:** The Worker itself runs on a free `workers.dev` URL -- you do not need a custom domain in Cloudflare. The DNS record above is only for authorizing email sending and goes on whatever DNS provider hosts your domain.
 
 > You will get your exact `workers.dev` subdomain after deploying in Step 4. You can find it in **Workers & Pages > Overview** in the Cloudflare dashboard. It looks like `dlp-alert-worker.abc123.workers.dev`. Come back and add this DNS record after deploying if you don't know it yet.
 
