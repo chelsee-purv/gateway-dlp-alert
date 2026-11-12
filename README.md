@@ -1,38 +1,54 @@
-# Gateway DLP Alert Worker
+# DLP Alert Worker
 
-A Cloudflare Worker that receives [Gateway HTTP Logpush](https://developers.cloudflare.com/cloudflare-one/insights/logs/logpush/) batches and sends a Slack alert when Cloudflare DLP profiles match on AI platform traffic.
+A Cloudflare Worker that monitors AI platform traffic (ChatGPT, Claude, Gemini, Copilot) for sensitive data and sends an **email alert** (and optionally a **Slack alert**) when Cloudflare DLP detects a match.
 
-## How it works
+Traffic is **allowed through** -- this is a monitoring/alerting tool, not a blocker.
 
 ```
 User sends prompt to ChatGPT / Claude / Gemini / Copilot
-        ↓
-Cloudflare Gateway inspects traffic (Allow + DLP log policy)
-        ↓
-Logpush delivers Gateway HTTP logs to this Worker (~30s delay)
-        ↓
-Worker checks UploadMatchedDlpProfiles / DownloadMatchedDlpProfiles
-        ↓
-Match found → Slack alert fires with user, app, URL, DLP profile name
+        |
+Cloudflare Gateway inspects traffic (DLP profiles scan for sensitive data)
+        |
+Logpush delivers Gateway HTTP logs to this Worker (~30 sec delay)
+        |
+Worker checks for DLP matches
+        |
+Match found --> email alert sent to your team
 ```
 
-Traffic is **allowed through** — this is a monitoring/alerting pattern, not a block.
+---
+
+## What You Need Before Starting
+
+- A Cloudflare account with **Zero Trust Enterprise** (required for Gateway HTTP Logpush)
+- **Gateway HTTP filtering** and **TLS decryption** already enabled
+- **DLP profiles** already configured (Zero Trust > DLP > DLP Profiles)
+- The **WARP client** deployed on user devices
+- **Node.js** installed on your computer ([download here](https://nodejs.org/))
 
 ---
 
-## Prerequisites
+## Setup (6 Steps)
 
-- Cloudflare Zero Trust account (Enterprise for `gateway_http` Logpush dataset)
-- Gateway HTTP filtering and TLS decryption enabled
-- DLP profiles configured in **Zero Trust > DLP > DLP profiles**
-- A Slack incoming webhook URL
-- `wrangler` CLI: `npm install -g wrangler`
+### Step 1: Install the Wrangler CLI
+
+Open a terminal and run:
+
+```bash
+npm install -g wrangler
+```
+
+Then log in to your Cloudflare account:
+
+```bash
+wrangler login
+```
+
+A browser window will open. Log in and authorize Wrangler.
 
 ---
 
-## Setup
-
-### 1. Clone and install
+### Step 2: Clone this repo and install dependencies
 
 ```bash
 git clone https://github.com/chelsee-purv/gateway-dlp-alert.git
@@ -40,128 +56,168 @@ cd gateway-dlp-alert
 npm install
 ```
 
-### 2. Configure your domain
+---
 
-Edit `wrangler.jsonc` and choose either:
+### Step 3: Fill in your settings
 
-- **workers.dev** (default, no custom domain needed) — leave `workers_dev: true`
-- **Custom domain** — comment out `workers_dev` and uncomment the `routes` block, filling in your domain
+Open the file **`wrangler.jsonc`** in any text editor. You will see three values marked with `<...>` that you need to replace:
 
-### 3. Set your Slack webhook
-
-```bash
-npx wrangler secret put SLACK_WEBHOOK_URL
-# paste your webhook URL when prompted
-# e.g. https://hooks.slack.com/services/T.../B.../...
+```jsonc
+"EMAIL_ALERT_TO": "<YOUR_RECIPIENT_EMAIL>",
+"EMAIL_ALERT_FROM": "dlp-alerts@<YOUR_DOMAIN>",
 ```
 
-To get a webhook URL: [api.slack.com/apps](https://api.slack.com/apps) → Create App → Incoming Webhooks → Add New Webhook.
+Replace them with your actual values. For example:
 
-### 4. Customise the AI platform list (optional)
-
-Edit `src/index.ts` and update `AI_PLATFORMS` to match the hosts you want to monitor:
-
-```typescript
-const AI_PLATFORMS = [
-  "chat.openai.com",
-  "chatgpt.com",
-  "claude.ai",
-  "gemini.google.com",
-  "copilot.microsoft.com",
-];
+```jsonc
+"EMAIL_ALERT_TO": "security-team@yourcompany.com",
+"EMAIL_ALERT_FROM": "dlp-alerts@yourcompany.com",
 ```
 
-### 5. Deploy
+| Setting | What to put | Example |
+|---------|-------------|---------|
+| `EMAIL_ALERT_TO` | The email address(es) that should receive DLP alerts. Comma-separate multiple addresses. | `admin@yourcompany.com` or `admin@yourcompany.com,security@yourcompany.com` |
+| `EMAIL_ALERT_FROM` | The "From" address on alert emails. Must use a domain you own. | `dlp-alerts@yourcompany.com` |
+| `EMAIL_ALERT_FROM_NAME` | Display name in the "From" field. You can leave the default. | `Cloudflare DLP Alert` |
+
+**Save the file.**
+
+**Then add this DNS record** so email delivery is authorized. Go to the Cloudflare dashboard for your domain, then **DNS > Records > Add record**:
+
+| Type | Name | Content |
+|------|------|---------|
+| TXT | `_mailchannels.yourcompany.com` | `v=mc1 cfid=dlp-alert-worker.YOUR-SUBDOMAIN.workers.dev` |
+
+> You will get your exact `workers.dev` subdomain after deploying in Step 4. You can find it in **Workers & Pages > Overview** in the Cloudflare dashboard. It looks like `dlp-alert-worker.abc123.workers.dev`. Come back and add this DNS record after deploying if you don't know it yet.
+
+---
+
+### Step 4: Deploy the Worker
 
 ```bash
 npx wrangler deploy
 ```
 
-Note the Worker URL from the output — you will need it for the Logpush job.
+The output will show your Worker URL. It will look something like:
+
+```
+Published dlp-alert-worker (0.5 sec)
+  https://dlp-alert-worker.abc123.workers.dev
+```
+
+**Copy this URL** -- you need it for Step 5.
+
+> If you haven't added the DNS record from Step 3 yet, do it now using the subdomain shown in the output.
 
 ---
 
-## Gateway policy
+### Step 5: Create a Gateway HTTP Policy (if you don't have one already)
 
-Create an **Allow** policy in Zero Trust that attaches your DLP profiles to AI platform traffic. This is what causes `UploadMatchedDlpProfiles` to be populated in the logs.
+This policy tells Gateway to scan AI platform traffic with your DLP profiles. Without this, there is nothing to alert on.
 
-**Zero Trust > Traffic controls > Firewall policies > HTTP > Add a policy**
+1. Go to [Zero Trust Dashboard](https://one.dash.cloudflare.com/)
+2. Navigate to **Traffic controls** > **Firewall policies** > **HTTP**
+3. Click **Add a policy**
+4. Configure:
 
 | Field | Value |
-|---|---|
-| Name | `AI Platform DLP Monitor` |
-| Traffic | Host is `chat.openai.com` OR `claude.ai` OR `gemini.google.com` OR `copilot.microsoft.com` |
-| DLP Profile | Select the profiles you want to detect (PII, Financial, etc.) |
-| Action | **Allow** |
+|-------|-------|
+| **Policy name** | `AI Platform DLP Monitor` |
+| **Traffic selector** | Host -- matches regex -- `(chat\.openai\.com\|chatgpt\.com\|claude\.ai\|gemini\.google\.com\|copilot\.microsoft\.com)` |
+| **Action** | **Allow** |
+
+5. Scroll down to **Configure policy settings** > **DLP profiles** and select the profiles you want to detect (e.g., PII, Financial Data, Source Code)
+6. Click **Save**
 
 ---
 
-## Logpush job
+### Step 6: Create the Logpush Job
 
-Point a Logpush job at the Worker URL.
+This tells Cloudflare to send Gateway HTTP logs to your Worker.
 
-**Zero Trust > Insights > Logs > Manage Logpush > Create a Logpush job**
+1. Go to [Zero Trust Dashboard](https://one.dash.cloudflare.com/)
+2. Navigate to **Logs** > **Logpush**
+3. Click **Create a Logpush job**
+4. Configure:
 
 | Setting | Value |
-|---|---|
-| Dataset | Gateway HTTP requests |
-| Destination | HTTP endpoint → your Worker URL |
-| Fields | `Datetime, Email, UserID, DeviceID, DeviceName, Action, URL, HTTPHost, HTTPMethod, HTTPStatusCode, ApplicationNames, PolicyID, PolicyName, SourceIP, UploadMatchedDlpProfiles, DownloadMatchedDlpProfiles, UploadMatchedDlpProfileEntries, DownloadMatchedDlpProfileEntries` |
-| Frequency | Low |
+|---------|-------|
+| **Dataset** | Gateway HTTP |
+| **Destination** | HTTP destination |
+| **Endpoint URL** | Paste the Worker URL from Step 4 (e.g., `https://dlp-alert-worker.abc123.workers.dev`) |
 
-Or via API:
-
-```bash
-curl -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/logpush/jobs" \
-  -H "Authorization: Bearer $API_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "dlp-alert-gateway-http",
-    "logpull_options": "fields=Datetime,Email,UserID,DeviceID,DeviceName,Action,URL,HTTPHost,HTTPMethod,HTTPStatusCode,ApplicationNames,PolicyID,PolicyName,SourceIP,UploadMatchedDlpProfiles,DownloadMatchedDlpProfiles,UploadMatchedDlpProfileEntries,DownloadMatchedDlpProfileEntries&timestamps=rfc3339",
-    "destination_conf": "https://<YOUR_WORKER_URL>/",
-    "dataset": "gateway_http",
-    "enabled": true,
-    "frequency": "low"
-  }'
-```
+5. On the field selection screen, make sure these fields are included:
+   - `Datetime`, `Email`, `UserID`, `DeviceID`, `DeviceName`, `Action`, `URL`, `HTTPHost`, `HTTPMethod`, `HTTPStatusCode`, `ApplicationNames`, `PolicyID`, `PolicyName`, `SourceIP`, `UploadMatchedDlpProfiles`, `DownloadMatchedDlpProfiles`, `UploadMatchedDlpProfileEntries`, `DownloadMatchedDlpProfileEntries`
+6. Click **Save**
 
 ---
 
-## Validate
+## Test It
 
-Send a prompt containing a fake SSN (`078-05-1120`) to ChatGPT or Claude while enrolled on WARP. Within ~30 seconds a Slack message should appear with the user, application, URL, and matched DLP profile name.
+1. On a device with the WARP client connected, go to [chat.openai.com](https://chat.openai.com) or [claude.ai](https://claude.ai)
+2. Send a prompt containing a fake SSN: `My social security number is 078-05-1120`
+3. Within ~30 seconds, you should receive an email alert at the address you configured in `EMAIL_ALERT_TO`
 
-To test the Worker directly without waiting for Logpush:
+**If you want to test the Worker directly** (without waiting for a real DLP event), run this from a terminal:
 
 ```bash
-curl -X POST https://<YOUR_WORKER_URL>/ \
+curl -X POST https://YOUR-WORKER-URL/ \
   -H "content-type: application/json" \
-  -d '{"Datetime":"2026-01-01T00:00:00Z","Email":"user@example.com","UserID":"test","DeviceID":"device-1","DeviceName":"Test-Device","Action":"allow","URL":"https://chat.openai.com/api/conversation","HTTPHost":"chat.openai.com","HTTPMethod":"POST","HTTPStatusCode":200,"ApplicationNames":["ChatGPT"],"PolicyID":"your-policy-id","PolicyName":"AI Platform DLP Monitor","SourceIP":"1.2.3.4","UploadMatchedDlpProfiles":["AI Prompt: PII"],"DownloadMatchedDlpProfiles":[],"UploadMatchedDlpProfileEntries":["Social Security Number"],"DownloadMatchedDlpProfileEntries":[]}'
+  -d '{"Datetime":"2026-01-01T00:00:00Z","Email":"testuser@yourcompany.com","UserID":"test","DeviceID":"device-1","DeviceName":"Test-Laptop","Action":"allow","URL":"https://chat.openai.com/api/conversation","HTTPHost":"chat.openai.com","HTTPMethod":"POST","HTTPStatusCode":200,"ApplicationNames":["ChatGPT"],"PolicyID":"test-policy","PolicyName":"AI Platform DLP Monitor","SourceIP":"1.2.3.4","UploadMatchedDlpProfiles":["PII Detection"],"DownloadMatchedDlpProfiles":[],"UploadMatchedDlpProfileEntries":["Social Security Number"],"DownloadMatchedDlpProfileEntries":[]}'
 ```
 
-Expected response: `ok - alerted on 1 violation(s)` and a Slack message.
+You should see `ok - alerted on 1 violation(s)` and get an email.
 
 ---
 
-## Slack alert format
+## Optional: Add Slack Alerts Too
 
-Each alert includes:
+If you also want alerts in Slack:
 
-- **User** — identity email or user ID from Gateway
-- **Application** — AI platform name
-- **URL** — the specific endpoint called
-- **DLP Profile Matched** — name of the Cloudflare DLP profile that fired
-- **Direction** — Prompt (upload) or Response (download)
-- **Time** — UTC timestamp
+1. Create a Slack webhook: [api.slack.com/apps](https://api.slack.com/apps) > Create App > Incoming Webhooks > Add New Webhook
+2. Run:
+
+```bash
+npx wrangler secret put SLACK_WEBHOOK_URL
+# paste the webhook URL when prompted
+```
+
+3. Redeploy:
+
+```bash
+npx wrangler deploy
+```
+
+---
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| No email received after testing | Check the DNS TXT record from Step 3 is correct. The `cfid=` value must match your Worker's `workers.dev` subdomain exactly. |
+| `ok - no violations` response | The test payload didn't match an AI platform host, or the DLP fields were empty. Make sure `HTTPHost` is one of the AI platforms and `UploadMatchedDlpProfiles` is not empty in the payload. |
+| Logpush job creation fails | The Worker must accept POST requests. Verify it deployed successfully with `npx wrangler tail` and try again. |
+| Emails going to spam | Add SPF and DKIM records for your sending domain. See [MailChannels docs](https://support.mailchannels.com/hc/en-us/articles/7122849237389). |
+| Want to see Worker logs | Run `npx wrangler tail` in a terminal -- it will stream live logs from your deployed Worker. |
 
 ---
 
 ## Cost
 
 | Component | Cost |
-|---|---|
-| Logpush (Gateway HTTP → Worker) | Free up to 25 GB/month, then $0.10/GB external destination |
-| Worker | Free (100,000 requests/day included on Workers Free) |
+|-----------|------|
+| Logpush (Gateway HTTP) | Included with Zero Trust Enterprise |
+| Worker | Free tier covers 100,000 requests/day |
+| Email (MailChannels) | Free from Workers |
 | Slack webhook | Free |
 
-For a typical 200-seat deployment, Logpush volume stays well within the free 25 GB monthly allowance.
+---
+
+## Files in This Repo
+
+| File | What it does |
+|------|-------------|
+| `wrangler.jsonc` | Worker configuration -- **this is where you fill in your settings** |
+| `src/index.ts` | The Worker code (receives logs, checks for DLP matches, sends alerts) |
+| `package.json` | Node.js dependencies |
+| `tsconfig.json` | TypeScript configuration |

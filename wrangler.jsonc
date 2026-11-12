@@ -3,29 +3,26 @@
   "name": "dlp-alert-worker",
   "main": "src/index.ts",
   "compatibility_date": "2024-11-01",
-
-
-  // Worker is invoked by Logpush over HTTPS -- needs a public URL
-  // Deployed as a Workers route on chelseedemosite.com
-  // Option A: deploy to a custom domain via a Workers route
-  // "routes": [
-  //   {
-  //     "pattern": "dlp-alerts.yourdomain.com/*",
-  //     "zone_name": "yourdomain.com"
-  //   }
-  // ],
-  //
-  // Option B: deploy to workers.dev (simpler, no custom domain needed)
   "workers_dev": true,
 
-  // Set SLACK_WEBHOOK_URL as a secret:  npx wrangler secret put SLACK_WEBHOOK_URL
   "vars": {
-    "SLACK_WEBHOOK_URL": "",
+    // ──────────────────────────────────────────────────────────────
+    //  YOU MUST FILL IN THESE VALUES BEFORE DEPLOYING
+    // ──────────────────────────────────────────────────────────────
 
-    // Email alert configuration (via MailChannels — free from Workers)
-    // Requires DNS TXT record: _mailchannels.<your-domain> → v=mc1 cfid=dlp-alert-worker.<subdomain>.workers.dev
-    "EMAIL_ALERT_TO": "ksundararajulu@essenmed.com",
-    "EMAIL_ALERT_FROM": "dlp-alerts@chelseedemosite.com",
-    "EMAIL_ALERT_FROM_NAME": "Cloudflare DLP Alert"
+    // Who should receive the email alert when a DLP match is found?
+    // Comma-separate multiple addresses: "alice@company.com,bob@company.com"
+    "EMAIL_ALERT_TO": "<YOUR_RECIPIENT_EMAIL>",
+
+    // What address should the alert email come FROM?
+    // Must be a domain you control (you'll add a DNS record for it in Step 3).
+    "EMAIL_ALERT_FROM": "dlp-alerts@<YOUR_DOMAIN>",
+
+    // Display name shown in the "From" field of the email
+    "EMAIL_ALERT_FROM_NAME": "Cloudflare DLP Alert",
+
+    // Slack webhook URL — leave empty string if you only want email alerts.
+    // If you want Slack alerts too, set this via:  npx wrangler secret put SLACK_WEBHOOK_URL
+    "SLACK_WEBHOOK_URL": ""
   }
 }
